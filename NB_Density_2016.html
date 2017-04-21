@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NB Density Map</title>
+    <meta charset="utf-8" />
+    <!-- <link rel="stylesheet" href="https://cdn.leafletjs.com/leaflet-0.7/leaflet.css"/> -->
+	<link rel="stylesheet" href="leaflet.css" type="text/css" media="screen" />
+	<link rel="stylesheet" href="style2.css" type="text/css" media="screen" />
+	
+
+	
+</head>
+<style>
+	<!-- .legend { -->
+		<!-- position: absolute; -->
+		<!-- font-size: 12px; -->
+		<!-- font-family: Arial, Helvetica, sans-serif; -->
+		<!-- fill: white; -->
+	<!-- } -->
+
+	.info {
+		padding: 6px 8px;
+		<!-- font: 14px/16px Arial, Helvetica, sans-serif; -->
+		background: white;
+		background: rgba(255,255,255,0.8);
+		box-shadow: 0 0 25px rgba(0,0,0,0.2);
+		border-radius: 5px;
+	}
+	.legend {
+		line-height: 34px;
+		color: #000000;
+		font-weight: bold;
+	}
+	.legend i {
+		width: 34px;
+		height: 34px;
+		float: left;
+		margin-right: 8px;
+		opacity: 0.7;
+	}
+
+	<!-- .popupCustom .leaflet-popup-content-wrapper { -->
+
+		<!-- opacity: 0.7; -->
+	<!-- } -->
+	<!-- .popupCustom .leaflet-popup-tip { -->
+		  <!-- border-left:2px solid transparent; -->
+		  <!-- border-right:2px solid transparent; -->
+		  <!-- border-top:2px solid #2c3e50; -->
+		  <!-- } -->
+</style>
+<body>
+
+    <div id="map" style="width: 1064px; height: 820px"></div>
+
+	<script src="https://d3js.org/d3.v3.min.js"></script>
+    <!-- <script src="https://cdn.leafletjs.com/leaflet-0.7/leaflet.js"></script> -->
+	<script src="./js/leaflet.js"></script>
+	<script src="./js/leaflet.ajax.min.js"></script>
+	<!-- <script src="leaflet-providers.js"></script> -->
+	<script src="jquery-2.1.1.min.js"></script>
+	<!-- <script src="leaflet-ajax.js"></script> -->
+	<script type="text/javascript" src="data/DM_2016_LatLong.json"></script>
+	<!-- <script src="leaflet.ajax.min" type="text/javascript"></script> -->
+	<script type="text/javascript" src="DM_2016_LatLong_2.json"></script>
+
+
+    <script>
+
+
+
+		
+	
+		var map = L.map('map').setView([40.705,-73.909], 11);
+		var toolserver = L.tileLayer('http://{s}.www.toolserver.org/tiles/bw-mapnik/{z}/{x}/{y}.png');
+		//var stamen = L.tileLayer('http://{s}.tile.stamen.com/toner/{z}/{x}/{y}.png', {attribution: ''}).addTo(map); /*Stamen.Toner*/
+		var stamen = L.tileLayer('http://stamen-tiles-{s}.a.ssl.fastly.net/toner-lite/{z}/{x}/{y}.png', {attribution: ''}).addTo(map); /*Stamen.TonerLite*/
+		//var stamen = L.tileLayer('http://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {attribution: ''}).addTo(map); /*CartoDB.Positron*/
+		//var stamen = L.tileLayer('http://a.tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution: ''}).addTo(map); /*OpenStreeMap.Mapkin*/
+		//var stamen = L.tileLayer('http://korona.geog.uni-heidelberg.de/tiles/roads/x={x}&y={y}&z={z}', {attribution: ''}).addTo(map); /*OpenMapSurfer*/
+		//var stamen = L.tileLayer('http://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}', {attribution: ''}).addTo(map); /*Esri.NatGeoWorldMap*/
+		//var baseLayers = {"stamen": stamen, "toolserver-mapnik":toolserver};
+		//L.control.layers(baseLayers).addTo(map);
+		
+		var color_domain = [2,3,4,5,6,7,8,9]
+		var ext_color_domain = [1,2,3,4,5,6,7,8,9]
+		var legend_labels = ["LOW", " ", " ", " ", " ", " ", " ", " ", "HIGH"]
+		var color = d3.scale.threshold()
+			.domain(color_domain)
+			.range(["#d53e4f", "#f46d43", "#fdae61", "#fee08b", "#ffffbf", "#e6f598", "#abdda4", "#66c2a5", "#3288bd"]);
+				
+		function getColor(d) {
+			return d > 1500 ? '#3288bd' :
+				   d > 1000 ? '#66c2a5' :
+				   d > 500  ? '#abdda4' :
+				   d > 200  ? '#e6f598' :
+				   d > 100  ? '#ffffbf' :
+				   d > 50   ? '#fee08b' :
+				   d > 20   ? '#fdae61' :
+				   d > 10   ? '#f46d43' :
+							   '#d53e4f';
+		}
+		
+		var commuteById = d3.map();
+			
+		var projection = d3.geo.mercator()
+
+		
+		var info = L.control();
+		info.onAdd = function(map) {
+			this._div = L.DomUtil.create('div', 'info');
+			return this._div;
+		};
+		info.addTo(map);
+		
+		var legend = L.control({position: 'topleft'});
+		legend.onAdd = function (map) {
+			var div = L.DomUtil.create('div', 'info legend'),
+				grades = [0, 10, 20, 50, 100, 200, 500, 1000, 1500],
+				labels = ["HIGH","","","","","","","","LOW"]; 
+			for (var i = 0; i < grades.length; i++) {
+				div.innerHTML +=
+					'<i style="background:' + getColor(grades[i] + 1) + '"></i> ' +
+					labels[i] + '<br>';					
+			}
+			return div;
+		};
+		legend.addTo(map);
+		
+		var dmDensity_style = {
+			"stroke": "#eef442",
+			"stroke-width": 2,
+			"fill-opacity": .7
+		};
+		var CURR_SELECT = ["Category"];
+		
+		// Add an SVG element to Leaflet’s overlay pane
+		var svg = d3.select(map.getPanes().overlayPane).append("svg"),
+			g = svg.append("g").attr("class", "leaflet-zoom-hide");
+			
+		
+	<!-- var dmDensity = d3.json("data/DM_Density_2016_Dissolve_DecDeg.json", function(geoShape) { -->
+	
+
+		<!-- //  create a d3.geo.path to convert GeoJSON to SVG -->
+		<!-- var transform = d3.geo.transform({point: projectPoint}), -->
+            	<!-- path = d3.geo.path().projection(transform);			 -->
+
+				
+						
+		<!-- // Use Leaflet to implement a D3 geometric transformation. -->
+		<!-- function projectPoint(x, y) { -->
+			<!-- var point = map.latLngToLayerPoint(new L.LatLng(y, x)); -->
+			<!-- this.stream.point(point.x, point.y); -->
+		<!-- } -->
+ 
+		<!-- // create path elements for each of the features -->
+		<!-- d3_features = g.selectAll("path") -->
+			<!-- .data(geoShape.features) -->
+			<!-- .enter().append("path") -->
+			<!-- .attr ("class", "dmDensity_style") -->
+			<!-- //.attr ("fill", function(d,i) {return color(i);}); -->
+		
+		
+		<!-- map.on("viewreset", reset); -->
+
+		<!-- reset(); -->
+		
+		<!-- svg.select("#progress-image").remove(); -->
+		
+		<!-- // fit the SVG element to leaflet's map layer -->
+		<!-- function reset() { -->
+        
+			<!-- bounds = path.bounds(geoShape); -->
+
+			<!-- var topLeft = bounds[0], -->
+				<!-- bottomRight = bounds[1]; -->
+
+			<!-- svg .attr("width", bottomRight[0] - topLeft[0]) -->
+				<!-- .attr("height", bottomRight[1] - topLeft[1]) -->
+				<!-- .style("left", topLeft[0] + "px") -->
+				<!-- .style("top", topLeft[1] + "px"); -->
+
+			<!-- g .attr("transform", "translate(" + -topLeft[0] + ","  -->
+			                                  <!-- + -topLeft[1] + ")"); -->
+
+			<!-- // initialize the path data	 -->
+			<!-- d3_features.attr("d", path) -->
+				<!-- .style("fill-opacity", 0.7)		 -->
+				<!-- .attr ("fill", function(d,i) {return color(i);}); -->
+		<!-- }	 -->
+
+		
+		<!-- map.scrollWheelZoom.disable(); -->
+	<!-- }); -->
+
+
+
+		<!-- var geojsonMarkerOptions = { -->
+			<!-- radius: 3, -->
+			<!-- fillColor: "#42bff4", -->
+			//color: "#000",
+			<!-- weight: 0, -->
+			//opacity: 1,
+			<!-- fillOpacity: 0.8 -->
+		<!-- }; -->
+		
+		<!-- var pnts = L.geoJson(dmPnts, { -->
+			<!-- pointToLayer: function (feature, latlng){ -->
+				<!-- var popupContent = "PERMIT ISSUED: "+ feature.properties.DateTxt +"<br> ADDRESS: "+ feature.properties.Address +", "+ feature.properties.Borough_Na.toUpperCase() +"<br> CB: "+ feature.properties.Community_.toString() +"<br> BIN: " + feature.properties.BIN.toString(); -->
+				<!-- var popupOptions = {"className": "popupCustom"}; -->
+				<!-- return L.circleMarker(latlng, geojsonMarkerOptions).bindPopup(popupContent,popupOptions); -->
+			<!-- } -->
+		<!-- }); -->
+
+		<!-- map.on('zoomend', function(){ -->
+			<!-- var z = map.getZoom(); -->
+			<!-- if (z > 12 && map.hasLayer(pnts)==false) { -->
+				<!-- return pnts.addTo(map);	 -->
+			<!-- } -->
+			<!-- else if (z <= 12 && map.hasLayer(pnts)==true) { -->
+				<!-- map.removeLayer(pnts); -->
+				
+			<!-- } -->
+		<!-- }); -->
+
+
+
+
+		map.scrollWheelZoom.disable();
+		
+        var geojsonMarkerOptions = {
+			radius: 3,
+			fillColor: "#42bff4",
+			<!-- //color: "#000", -->
+			weight: 0,
+			<!-- //opacity: 1, -->
+			fillOpacity: 0.8
+		};
+		
+	
+		var pnts = new L.geoJson.ajax("data/NB_2016_LatLong_3.json", {	
+			pointToLayer: function (feature, latlng) {
+				var popupContent = "PERMIT ISSUED: "+ feature.properties.Date_txt +"<br> ADDRESS: "+ feature.properties.Address +", "+ feature.properties.Borough_Na.toUpperCase() +"<br> CB: "+ feature.properties.Community_.toString() +"<br> BIN: " + feature.properties.BIN.toString();
+				var popupOptions = {"className": "popupCustom"};
+				return L.circleMarker(latlng, geojsonMarkerOptions).bindPopup(popupContent,popupOptions);
+				
+			}
+					
+		});
+
+		map.on('zoomend', function(){
+			var z = map.getZoom();
+			if (z > 12 && map.hasLayer(pnts)==false) {
+				return pnts.addTo(map);
+			}
+			else if (z <= 12 && map.hasLayer(pnts)==true) {
+				map.removeLayer(pnts);
+				
+			}	
+		});
+
+		function getDMcolor(d) {
+			return d > 8 ? '#d53e4f' :
+				   d > 7  ? '#f46d43' :
+				   d > 6  ? '#fdae61' :
+				   d > 5  ? '#fee08b' :
+				   d > 4  ? '#ffffbf' :
+				   d > 3   ? '#e6f598' :
+				   d > 2   ? '#abdda4' :
+				   d > 1   ? '#66c2a5' :
+							  '#3288bd'; 
+		}
+		function style(feature) {
+			return {
+				fillColor: getDMcolor(feature.properties.OBJECTID),
+				fillOpacity: 0.7,
+				//stroke: true,
+				//color: "#cfcfd1",
+				//weight: 0.5,
+				stroke: false,
+				fill: true
+			};
+		}
+		
+		function highlightFeature(e) {
+			var layer = e.layer;
+			layer.setStyle({
+			weight: 2,
+			color: "#eef442",
+			fillOpacity: 0.7
+			});
+		}
+		function onEachFeature(feature, layer) {
+			layer.on({
+				mousemove: highlightFeature
+			});
+		}
+
+		var dm = new L.geoJson.ajax(("data/NB_Density_2016_DecDeg.json"), {style: style, onEachFeature: onEachFeature}).addTo(map);
+		
+
+
+    </script>
+</body>
+</html>
