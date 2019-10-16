@@ -155,7 +155,7 @@ var CURR_SELECT = ["HC01_EST_VC05"];
 //Load layer and data
 queue()
     .defer(d3.json, "data/CD_topoJSON.json")
-    .defer(d3.csv, "data/Permits_Q2_2019.csv", typeAndSet)
+    .defer(d3.csv, "data/Permits_Q3_2019.csv", typeAndSet)
     .await(ready);
 
 
